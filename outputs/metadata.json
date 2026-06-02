@@ -1,0 +1,12 @@
+{
+  "sequence_length": 10,
+  "target_event_type": "OPENED",
+  "time_since_last_cap_seconds": 3600,
+  "random_seed": 42,
+  "tensor_schema": {
+    "app_sequences": "[num_sequences, 10] int64 app ids",
+    "context_sequences": "[num_sequences, 10, 3] float32: hour_of_day, day_of_week, time_since_last_app",
+    "targets": "[num_sequences] int64 next-app ids",
+    "user_indices": "[num_sequences] int64 user ids from user_vocab.json"
+  }
+}

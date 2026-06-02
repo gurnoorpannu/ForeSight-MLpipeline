@@ -1,0 +1,9 @@
+# Large tensor files
+outputs/*.pt
+data/
+
+# Colab junk
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
