@@ -39,5 +39,3 @@ after collapsing consecutive duplicate events).
 | `models/foresight_lstm.onnx` | ONNX intermediate |
 | `outputs/app_vocab.json` | App ID → package name mapping |
 | `notebook/ForeSightMLPipeline.ipynb` | Full reproducible pipeline |
-
-## Samsung ennovateX AX Hackathon 2026 — PS #3
