@@ -1,6 +1,6 @@
 """Export the ForeSight PyTorch checkpoint to Android-stable TFLite.
 
-Run this in Colab or another environment with torch and ai-edge-torch installed.
+Run this in Colab or another environment with torch and litert-torch installed.
 It bypasses the ONNX/onnx2tf path and preserves the PyTorch context layout:
 app_sequences [B, 10], context_sequences [B, 10, 3].
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import ai_edge_torch
+import litert_torch
 import torch
 import torch.nn as nn
 
@@ -68,7 +68,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=Path("models/foresight_aet.tflite"),
-        help="Path for the ai-edge-torch TFLite export.",
+        help="Path for the LiteRT Torch TFLite export.",
     )
     args = parser.parse_args()
 
@@ -90,7 +90,7 @@ def main() -> None:
     print("  app_sequences: [1, 10] int64")
     print("  context_sequences: [1, 10, 3] float32")
 
-    edge_model = ai_edge_torch.convert(model, (sample_apps, sample_context))
+    edge_model = litert_torch.convert(model, (sample_apps, sample_context))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     edge_model.export(str(args.output))
 
