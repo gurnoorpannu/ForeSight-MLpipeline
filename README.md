@@ -3,8 +3,10 @@
 Proactive memory management system that predicts which app a user will 
 open next and acts on the prediction before they tap.
 
-## Model Performance
+## Implementation for this as an App can be found at,
+https://github.com/gurnoorpannu/ForeSightApk
 
+## Model Performance
 Trained on LSApp dataset (213K real app switches across 291 users,  
 after collapsing consecutive duplicate events).
 
