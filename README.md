@@ -37,19 +37,6 @@ after collapsing consecutive duplicate events).
 
 ## Android TFLite Export
 
-Use the PyTorch checkpoint as the source of truth and export directly with
-Google's LiteRT Torch path:
-
-```bash
-python scripts/export_litert_torch.py \
-  --checkpoint models/foresight_best.pt \
-  --output models/foresight_aet.tflite
-```
-
-In Colab, point `--checkpoint` and `--output` at the Drive model directory.
-The generated `foresight_aet.tflite` replaces the old ONNX-converted Android
-asset.
-
 Android input contract for the LiteRT Torch export:
 
 | Input | Shape | Type |
