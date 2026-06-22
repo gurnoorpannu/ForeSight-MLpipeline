@@ -1,17 +1,19 @@
-# ForeSight — Predictive On-Device Memory Manager for Android
+# ForeSight ML Pipeline
 
-Proactive memory management system that predicts which app a user will 
-open next and acts on the prediction before they tap.
+Training and export pipeline for **ForeSight**, a predictive on-device memory manager for Android.
 
-## Implementation for this as an App can be found at,
-https://github.com/gurnoorpannu/ForeSightApk
+This repo trains the next-app-prediction LSTM and exports it to TFLite. The Android app that runs it on-device lives at [ForeSightApk](https://github.com/gurnoorpannu/ForeSightApk).
 
-## Model Performance
-Trained on LSApp dataset (213K real app switches across 291 users,  
-after collapsing consecutive duplicate events).
+## What it predicts
 
-| Metric | Score | Baseline (most frequent in window) |
-|--------|-------|-------------------------------------|
+Given the last 10 app switches plus light context (hour of day, day of week, time since last switch), the model predicts which app you'll open next, out of an 87-app vocabulary built from the training data.
+
+## Model performance
+
+Trained on the LSApp dataset (213K real app switches across 291 users, after deduplicating consecutive identical events):
+
+| Metric | Score | Baseline (most-frequent-in-window) |
+|---|---|---|
 | Recall@1 | 37.8% | 9.5% |
 | Recall@3 | 59.7% | 25.9% |
 | Recall@5 | 67.8% | — |
@@ -19,39 +21,61 @@ after collapsing consecutive duplicate events).
 
 ## Architecture
 
-- 2-layer LSTM, 64-dim app embeddings + 3-dim context features
-- Input: last 10 app switches + (hour of day, day of week, time gap)
-- Output: probability distribution over 87 apps
-- Parameters: ~250K — LiteRT Torch TFLite fp32: **1.01 MB**
+- 2-layer LSTM (hidden size 128, dropout 0.3), 64-dim app embeddings concatenated with 3-dim context features at every timestep
+- Input: 10-step app sequence `[B,10]` (int64 app IDs) + context `[B,10,3]` (hour-of-day, day-of-week, time-gap — all normalized)
+- Output: raw logits over 87 app classes
+- ~250K parameters — exported size 1.01 MB (fp32, LiteRT Torch)
 
-## Key Engineering Notes
+## Key engineering notes
 
-- Caught and fixed data leakage bug: LSApp logs multiple OPENED events 
-  per Activity, causing 83.5% baseline from simply copying last event.
-  After deduplication: 1.67M raw events → 213K real app switches.
-- onnx2tf transposes context axis: PyTorch `[B, 10, 3]` → TFLite `[B, 3, 10]`
-- The ONNX/onnx2tf TFLite export loaded on Android but crashed during native
-  `Interpreter.runForMultipleInputsOutputs`.
-- LiteRT Torch preserves PyTorch context layout: `[B, 10, 3]`
-- fp16 quantization incompatible with TFLite GATHER op (embedding layer)
+- **Data leakage bug.** LSApp logs multiple `OPENED` events per Android Activity, not per real app switch. Treated naively, this let the model hit 83.5% "accuracy" by trivially copying the last event. Deduplicating consecutive repeats brought the dataset down from 1.67M raw events to 213K genuine app switches, and real recall dropped to the numbers above.
+- **ONNX export crashed on Android.** The original `onnx2tf` path silently transposed the context axis (`[B,10,3]` → `[B,3,10]`) and produced a graph that loaded fine on-device but segfaulted (`SIGSEGV`) inside `Interpreter.runForMultipleInputsOutputs` — even after ruling out tensor routing, XNNPACK, and 16KB page alignment as causes.
+- **Fix: export straight from PyTorch via LiteRT Torch** (`litert_torch.convert`), bypassing ONNX entirely. This preserves the original `[B,10,3]` context layout and produces a graph that runs cleanly on-device.
+- fp16 quantization is incompatible with the TFLite `GATHER` op used by the embedding layer, so the shipped model is fp32.
 
-## Android TFLite Export
+## Android contract
 
-Android input contract for the LiteRT Torch export:
+The exported model expects:
 
 | Input | Shape | Type |
-|-------|-------|------|
+|---|---|---|
 | `app_sequences` | `[1, 10]` | `int64` |
 | `context_sequences` | `[1, 10, 3]` | `float32` |
 
-## Files
+Output: `[1, 87]` float32 raw logits (softmax applied on-device).
 
-| File | Description |
-|------|-------------|
-| `models/foresight_aet.tflite` | Android production TFLite via LiteRT Torch |
-| `models/foresight_best.pt` | PyTorch checkpoint |
-| `models/foresight_lstm.onnx` | ONNX intermediate |
-| `outputs/app_vocab.json` | App ID → package name mapping |
-| `notebook/ForeSightMLPipeline.ipynb` | Original full reproducible pipeline |
-| `notebook/ForeSightMLPipeline_LiteRT.ipynb` | Latest pipeline with LiteRT Torch export |
-| `scripts/export_litert_torch.py` | Direct PyTorch → TFLite export script |
+## Repo layout
+
+```
+models/
+├── foresight_best.pt        # PyTorch checkpoint (source of truth)
+├── foresight_lstm.onnx      # ONNX intermediate (legacy export path, kept for reference)
+└── foresight_aet.tflite     # Android production model — LiteRT Torch export, 1.01 MB
+
+notebook/
+├── ForeSightMLPipeline.ipynb         # Original end-to-end pipeline: data prep -> train -> eval
+└── ForeSightMLPipeline_LiteRT.ipynb  # Latest pipeline, includes LiteRT Torch export
+
+outputs/
+├── app_vocab.json           # App label -> model app-ID mapping (87 entries)
+├── class_distribution.csv   # Per-app target counts in the training set
+└── metadata.json            # Tensor schema, sequence length, target event type, seed
+
+scripts/
+└── export_litert_torch.py   # Standalone PyTorch checkpoint -> TFLite (LiteRT Torch) exporter
+```
+
+## Reproducing the export
+
+```bash
+pip install torch litert-torch
+python scripts/export_litert_torch.py \
+  --checkpoint models/foresight_best.pt \
+  --output models/foresight_aet.tflite
+```
+
+For the full data pipeline (loading LSApp, deduplication, training, evaluation), see `notebook/ForeSightMLPipeline_LiteRT.ipynb`.
+
+## Related
+
+- Android app (runs this model on-device): [ForeSightApk](https://github.com/gurnoorpannu/ForeSightApk)
